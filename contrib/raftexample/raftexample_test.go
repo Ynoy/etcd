@@ -38,10 +38,11 @@ type cluster struct {
 // newCluster creates a cluster of n nodes
 func newCluster(n int) *cluster {
 	peers := make([]string, n)
+	// 生成集群各个节点地址，端口从10001开始
 	for i := range peers {
 		peers[i] = fmt.Sprintf("http://127.0.0.1:%d", 10000+i)
 	}
-
+	// 集群各个节点配置初始化
 	clus := &cluster{
 		peers:       peers,
 		commitC:     make([]<-chan *string, len(peers)),
@@ -49,8 +50,9 @@ func newCluster(n int) *cluster {
 		proposeC:    make([]chan string, len(peers)),
 		confChangeC: make([]chan raftpb.ConfChange, len(peers)),
 	}
-
+	// 遍历集群节点配置，并进行下一步操作
 	for i := range clus.peers {
+		// 先清除本地节点信息文件
 		os.RemoveAll(fmt.Sprintf("raftexample-%d", i+1))
 		os.RemoveAll(fmt.Sprintf("raftexample-%d-snap", i+1))
 		clus.proposeC[i] = make(chan string, 1)
@@ -163,7 +165,11 @@ func TestCloseProposerInflight(t *testing.T) {
 	}
 }
 
+/**
+设置值、获取值单元测试
+*/
 func TestPutAndGetKeyValue(t *testing.T) {
+	// 初始化一个节点
 	clusters := []string{"http://127.0.0.1:9021"}
 
 	proposeC := make(chan string)
@@ -171,11 +177,12 @@ func TestPutAndGetKeyValue(t *testing.T) {
 
 	confChangeC := make(chan raftpb.ConfChange)
 	defer close(confChangeC)
-
+	// 声明一个KV存储
 	var kvs *kvstore
+	// 初始化一个raft协议Node
 	getSnapshot := func() ([]byte, error) { return kvs.getSnapshot() }
 	commitC, errorC, snapshotterReady := newRaftNode(1, clusters, false, getSnapshot, proposeC, confChangeC)
-
+	// 初始化KV存储
 	kvs = newKVStore(<-snapshotterReady, proposeC, commitC, errorC)
 
 	srv := httptest.NewServer(&httpKVAPI{

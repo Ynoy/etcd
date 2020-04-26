@@ -66,8 +66,11 @@ type raftNode struct {
 
 	snapCount uint64
 	transport *rafthttp.Transport
-	stopc     chan struct{} // signals proposal channel closed
+	// 停止通道信息
+	stopc chan struct{} // signals proposal channel closed
+	// http关闭标志
 	httpstopc chan struct{} // signals http server to shutdown
+	// http关闭完成标志channel
 	httpdonec chan struct{} // signals http server shutdown complete
 }
 
@@ -78,10 +81,14 @@ var defaultSnapshotCount uint64 = 10000
 // provided the proposal channel. All log entries are replayed over the
 // commit channel, followed by a nil message (to indicate the channel is
 // current), then new log entries. To shutdown, close proposeC and read errorC.
+/*
+	初始化一个raft协议实例，并且通过channel返回结果
+*/
 func newRaftNode(id int, peers []string, join bool, getSnapshot func() ([]byte, error), proposeC <-chan string,
 	confChangeC <-chan raftpb.ConfChange) (<-chan *string, <-chan error, <-chan *snap.Snapshotter) {
-
+	// 存放提交结果
 	commitC := make(chan *string)
+	// 存放异常错误信息
 	errorC := make(chan error)
 
 	rc := &raftNode{
@@ -103,6 +110,7 @@ func newRaftNode(id int, peers []string, join bool, getSnapshot func() ([]byte, 
 		snapshotterReady: make(chan *snap.Snapshotter, 1),
 		// rest of structure populated after WAL replay
 	}
+	// 通过协程处理raft协议即初始化启动
 	go rc.startRaft()
 	return commitC, errorC, rc.snapshotterReady
 }
@@ -258,7 +266,9 @@ func (rc *raftNode) writeError(err error) {
 }
 
 func (rc *raftNode) startRaft() {
+	// 判断snap文件是否存在
 	if !fileutil.Exist(rc.snapdir) {
+		// 不存在则创建一个权限为750的文件夹
 		if err := os.Mkdir(rc.snapdir, 0750); err != nil {
 			log.Fatalf("raftexample: cannot create dir for snapshot (%v)", err)
 		}
@@ -282,14 +292,16 @@ func (rc *raftNode) startRaft() {
 		MaxInflightMsgs:           256,
 		MaxUncommittedEntriesSize: 1 << 30,
 	}
-
+	// 设置raft节点
 	if oldwal {
+		// 如果存在将进行重启
 		rc.node = raft.RestartNode(c)
 	} else {
 		startPeers := rpeers
 		if rc.join {
 			startPeers = nil
 		}
+		// 不存在将按照新配置进行启动
 		rc.node = raft.StartNode(c, startPeers)
 	}
 
@@ -309,8 +321,9 @@ func (rc *raftNode) startRaft() {
 			rc.transport.AddPeer(types.ID(i+1), []string{rc.peers[i]})
 		}
 	}
-
+	// 启动Http服务
 	go rc.serveRaft()
+	// 监听各个通道进行消费
 	go rc.serveChannels()
 }
 
@@ -392,6 +405,7 @@ func (rc *raftNode) serveChannels() {
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
+	// 通过匿名协程处理节点变化
 	// send proposals over raft
 	go func() {
 		confChangeCount := uint64(0)
@@ -403,6 +417,7 @@ func (rc *raftNode) serveChannels() {
 					rc.proposeC = nil
 				} else {
 					// blocks until accepted by raft state machine
+					// kvStore
 					rc.node.Propose(context.TODO(), []byte(prop))
 				}
 
