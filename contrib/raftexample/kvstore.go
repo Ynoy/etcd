@@ -26,9 +26,14 @@ import (
 
 // a key-value store backed by raft
 type kvstore struct {
-	proposeC    chan<- string // channel for proposing updates
-	mu          sync.RWMutex
-	kvStore     map[string]string // current committed key-value pairs
+	// 应用和底层raft库之间的通信接口，是一个channel，所有对应用的更新请求都会有应用通过改channel向底层raft库进行传递
+	// channel for proposing updates
+	proposeC chan<- string
+	mu       sync.RWMutex
+	// 内存状态机，存储应用的状态数据
+	// current committed key-value pairs
+	kvStore map[string]string
+	// 应用管理snapshot的接口
 	snapshotter *snap.Snapshotter
 }
 

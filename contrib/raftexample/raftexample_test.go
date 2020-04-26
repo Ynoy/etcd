@@ -181,6 +181,7 @@ func TestPutAndGetKeyValue(t *testing.T) {
 	var kvs *kvstore
 	// 初始化一个raft协议Node
 	getSnapshot := func() ([]byte, error) { return kvs.getSnapshot() }
+	// 此方法实例raft的简单使用
 	commitC, errorC, snapshotterReady := newRaftNode(1, clusters, false, getSnapshot, proposeC, confChangeC)
 	// 初始化KV存储
 	kvs = newKVStore(<-snapshotterReady, proposeC, commitC, errorC)

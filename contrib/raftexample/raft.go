@@ -38,11 +38,19 @@ import (
 )
 
 // A key-value stream backed by raft
+/*
+	该数据结构是应用和底层raft核心库衔接的桥梁，通过此结构，应用不需过多关心底层raft实现细节
+	降低系统耦合程度。
+*/
 type raftNode struct {
-	proposeC    <-chan string            // proposed messages (k,v)
+	// proposed messages (k,v)
+	// 应用的更新传递给底层raft
+	proposeC    <-chan string
 	confChangeC <-chan raftpb.ConfChange // proposed cluster config changes
-	commitC     chan<- *string           // entries committed to log (k,v)
-	errorC      chan<- error             // errors from raft session
+	// entries committed to log (k,v)
+	// 底层组件raft通知应用准备提交的指令channel
+	commitC chan<- *string
+	errorC  chan<- error // errors from raft session
 
 	id          int      // client ID for raft session
 	peers       []string // raft peer URLs
@@ -57,14 +65,18 @@ type raftNode struct {
 	appliedIndex  uint64
 
 	// raft backing for the commit/error channel
+	// 是对底层的raft组件的抽象，所有底层raft组件的交互都通过改数据结构暴露的API进行实现
 	node        raft.Node
 	raftStorage *raft.MemoryStorage
-	wal         *wal.WAL
-
-	snapshotter      *snap.Snapshotter
-	snapshotterReady chan *snap.Snapshotter // signals when snapshotter is ready
+	// wal日志管理，etcd-raft将日志的管理交给应用层进行处理
+	wal *wal.WAL
+	// 同wal，etcd-raft将快照的管理也交给应用层来处理；
+	snapshotter *snap.Snapshotter
+	// signals when snapshotter is ready
+	snapshotterReady chan *snap.Snapshotter
 
 	snapCount uint64
+	// 应用同其他节点应用的网络传输接口，同wal，etcd-raft将集群节点之间的网络请求发送和接受也交给应用层处理
 	transport *rafthttp.Transport
 	// 停止通道信息
 	stopc chan struct{} // signals proposal channel closed
